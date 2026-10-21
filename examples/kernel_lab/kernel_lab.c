@@ -54,9 +54,38 @@ static int lab_open(struct inode *inode, struct file *file)
 	return single_open(file, lab_show, NULL);
 }
 
+/*
+ * Trigger deliberate kernel WARNING (bukan oops fatal) untuk latihan analisis log:
+ * tulis byte 0xDEAD ke /proc/kernel_lab -> kernel log WARNING + stack trace,
+ * kernel TETAP jalan normal (aman untuk mesin produksi).
+ */
+static ssize_t lab_write(struct file *file, const char __user *buf, size_t count,
+			 loff_t *ppos)
+{
+	u16 v = 0;
+
+	(void)file;
+	(void)ppos;
+
+	if (count < sizeof(v))
+		return -EINVAL;
+
+	if (copy_from_user(&v, buf, sizeof(v)))
+		return -EFAULT;
+
+	if (v == 0xDEAD) {
+		pr_warn("kernel_lab: dipicu manual (0x%04x) — analisis ini akan jadi bahan latihan\n", v);
+		dump_stack();
+	}
+
+	lab_counter = v;
+	return count;
+}
+
 static const struct proc_ops lab_pops = {
 	.proc_open	= lab_open,
 	.proc_read	= seq_read,
+	.proc_write	= lab_write,
 	.proc_lseek	= seq_lseek,
 	.proc_release	= single_release,
 };
