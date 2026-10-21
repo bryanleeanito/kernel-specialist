@@ -314,4 +314,11 @@ bash /root/kernel-lab/bootstrap/verify.sh              # cek paritas vs expected
 - **Paritas diukur, bukan diklaim**: `expected.json` (reference) + `verify.sh` → "PARITAS OK".
 - Memori per-OS tidak ditimpa sembarangan: fase 6 backup dulu (`*.bak-<timestamp>`), dan `install.sh` hanya backup bila isi berbeda.
 
+**Bug di skrip `finish-github-setup.sh` (ketemu saat uji 21 Okt, sudah diperbaiki):**
+1. `ssh -T git@github.com` **keluar exit=1 WALAUTH sukses** (GitHub memang begitu) →
+   cek harus lewat **output** (`grep "successfully authenticated"`), bukan exit code.
+2. **Paste token bisa nyasar karakter** (terbukti: `sgithub_pat_…` → "Invalid username or token") →
+   selalu **trim + validasi pola** (`^github_pat_[A-Za-z0-9_]+$`) sebelum dipakai.
+3. Skrip bisa **menimpa env service dengan token kosong** → guard: skip kalau kosong.
+
 **Status paritas saat ini: OK** (plugins/agents/commands/skills/packages/tuning/files/mesh identik; tes 73/73 + 56/56).
