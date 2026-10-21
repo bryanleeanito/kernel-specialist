@@ -90,6 +90,21 @@ for (const cmd of okCases) {
   t(`LOLOS: ${cmd}`, r === null, `dapat=${r?.effect} (${r?.why})`)
 }
 
+console.log("-- false positive guard (teks dokumentasi/quoted, bukan eksekusi) --")
+const safeCases = [
+  ["echo 'rm -rf /boot' > catatan.txt", "hanya echo, bukan rm"],
+  ["cat <<'EOF'\nmkfs.ext4 /dev/sda1\nEOF", "isi heredoc (dokumentasi)"],
+  ["python3 - <<'PY'\nprint('wipefs -a /dev/sda')\nPY", "isi heredoc python"],
+  ["grep -r 'rm -rf /' .", "grep pola"],
+  ["echo 'update-grub' && echo done", "hanya echo"],
+  ["# contoh: make install", "komentar"],
+  ["ls /boot && echo 'make install ok'", "echo di akhir pipeline"],
+]
+for (const [cmd, why] of safeCases) {
+  const r = check(cmd)
+  t(`LOLOS: ${cmd.split("\n")[0].slice(0, 44)}`, r === null, `dapat=${r?.effect} (${r?.why})`)
+}
+
 console.log("=" * 60)
 console.log(`  ${pass}/${pass + fail} assertion lulus`)
 console.log("=" * 60)
