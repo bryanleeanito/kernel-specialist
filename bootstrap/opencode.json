@@ -1,0 +1,136 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "username": "kzldx",
+  "default_agent": "kernel",
+  "instructions": [
+    "~/.config/opencode/MEMORY.md",
+    "~/.config/opencode/TRACKER.md",
+    "~/.config/opencode/KERNEL-AGENTS.md",
+    "~/.config/opencode/MEMORY-KERNEL.md",
+    "~/.config/opencode/TRACKER-KERNEL.md"
+  ],
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp"
+      },
+      "playwright": {
+        "type": "local",
+        "command": [
+          "npx",
+          "-y",
+          "@playwright/mcp@latest"
+        ]
+      },
+      "github": {
+        "type": "remote",
+        "url": "https://api.githubcopilot.com/mcp/",
+        "headers": {
+          "Authorization": "Bearer {env:GITHUB_TOKEN}"
+        }
+      }
+    }
+  },
+  "plugins": [],
+  "permissions": [
+    {
+      "action": "external_directory",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "shell",
+      "resource": "rm -rf /boot*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "rm -rf /lib/modules*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "mkfs*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "wipefs*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "sgdisk --zap-all*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "dd *of=/dev/*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "make install*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "make modules_install*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "update-initramfs*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "mkinitramfs*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "update-grub*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "depmod*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "insmod*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "modprobe*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "rmmod*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "git push*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "apt-get install*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "apt install*",
+      "effect": "ask"
+    }
+  ],
+  "skills": [
+    "/root/.agents/skills"
+  ]
+}

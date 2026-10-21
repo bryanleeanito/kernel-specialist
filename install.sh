@@ -45,14 +45,16 @@ TS="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$DST/agents" "$DST/commands" "$DST/skills"
 
 backup() {
+  # backup hanya kalau isi BERBEDA (hindari kumpulan .bak spam)
   [ -f "$1" ] || return 0
+  if cmp -s "$1" "$2" 2>/dev/null; then return 0; fi
   cp -f "$1" "$1.bak-$TS"
   echo "[i] backup $(basename "$1") → $(basename "$1").bak-$TS"
 }
 
 # 1) instruksi track kernel
 for f in KERNEL-AGENTS.md; do
-  backup "$DST/$f"
+  backup "$DST/$f" "$SRC/$f"
   cp -f "$SRC/opencode/$f" "$DST/$f"
   echo "[OK] $f"
 done
@@ -85,7 +87,7 @@ if [ -d "$SRC/opencode/plugins" ]; then
   mkdir -p "$DST/plugins"
   for f in "$SRC"/opencode/plugins/*.js; do
     n="$(basename "$f")"
-    backup "$DST/plugins/$n"
+    backup "$DST/plugins/$n" "$f"
     cp -f "$f" "$DST/plugins/$n"
     echo "[OK] plugin $n"
   done
