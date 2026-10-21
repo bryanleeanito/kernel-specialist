@@ -47,7 +47,9 @@ Mesin Kali sekarang punya **track kernel & co-pilot sistem** untuk OpenCode v2:
 - section "Instance kembar" di `AGENTS.md` instance #1 (cara koordinasi via mesh + lokasi dokumen).
 
 > Instance #1 **tidak** kuganggu setting/config/MCP-nya — hanya nambah 2 plugin + 1 section pointer.
-> Instance #1 butuh **restart/reload** biar plugin baru termuat: `opencode reload` (atau tutup-buka TUI).
+> ✅ **Sudah termuat otomatis** (file watcher service, tanpa restart): `kali-ops` **active** + `kernel-lab` **active**
+> di service instance #1 (port 49374). 7 plugin total di sana: dev-journal, shell-env, token-tracker,
+> agent-memory, opencode-mem, **kali-ops**, **kernel-lab**.
 
 **Koordinasi lintas instance (semua di mesin ini):**
 - **Mesh** (bus): `kali-kernel` (role kernel) ↔ `windows-dev` (role development).
