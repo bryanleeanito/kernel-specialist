@@ -350,8 +350,8 @@ const DENY = [
   { re: /\bmkfs(\.[a-z0-9]+)?\b/i, why: "memformat filesystem" },
   { re: /\bwipefs\b/i, why: "menghapus signature disk" },
   { re: /\bsgdisk\s+.*--zap-all/i, why: "menghapus seluruh partisi disk" },
-  { re: /\bdd\b[^|;]*\bof=\/dev\//i, why: "menulis langsung ke device disk" },
-  { re: />\s*\/dev\/(sd|nvme|vd)[a-z]/i, why: "redirect output ke device disk" },
+  { re: /\bdd\b[^|;]*\bof=\/dev\/(?!null\b|zero\b|random\b|urandom\b|tty\b|shm\b|fd\b|stdin\b|stdout\b|stderr\b|full\b|ptmx\b|pts\/)[a-z]/i, why: "menulis langsung ke device disk", global: true },
+  { re: />\s*\/dev\/(sd|nvme|vd)[a-z]/i, why: "redirect output ke device disk", global: true },
   { re: /\bchmod\s+-R\s+777\s+\/\s*$/i, why: "membuka permissions seluruh root" },
   { re: /\bchown\s+-R\s+\S+\s+\/\s*$/i, why: "mengubah ownership seluruh root" },
 ]
@@ -371,13 +371,47 @@ const ASK = [
   { re: /\bcurl\b[^|;]*\|\s*(ba)?sh\b/i, why: "menjalankan script dari internet" },
 ]
 
+/**
+ * Normalisasi teks perintah sebelum dicocokkan:
+ * 1) isi heredoc dibuang — menulis dokumentasi yang menyebut "mkfs" bukan
+ *    perintah merusak, jangan sampai trigger deny.
+ * 2) pola di-anchor ke POSISI perintah (awal baris / setelah ; & | / sudo),
+ *    sehingga `echo "rm -rf /"` tidak dianggap sebagai eksekusi rm.
+ */
+function normalizeCommand(command) {
+  const raw = String(command || "")
+  const lines = raw.split("\n")
+  const out = []
+  let inHere = false
+  let term = ""
+  for (const ln of lines) {
+    if (!inHere) {
+      const m = ln.match(/<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?/)
+      out.push(ln)
+      if (m) {
+        inHere = true
+        term = m[1]
+      }
+    } else if (ln.trim() === term) {
+      inHere = false
+      out.push(ln)
+    }
+    // body heredoc: dibuang
+  }
+  return out.join("\n")
+}
+
+const POS = "(?:^|[\\n;&|]\\s*|\\bsudo\\s+)"
+const atPos = (re) => new RegExp(POS + "(?:" + re.source + ")", re.flags.replace("g", ""))
+
 function guardCheck(command) {
-  const cmd = String(command || "")
+  const cmd = normalizeCommand(command)
   for (const d of DENY) {
-    if (d.re.test(cmd)) return { effect: "deny", why: d.why }
+    const re = d.global ? d.re : atPos(d.re)
+    if (re.test(cmd)) return { effect: "deny", why: d.why }
   }
   for (const a of ASK) {
-    if (a.re.test(cmd)) return { effect: "ask", why: a.why }
+    if (atPos(a.re).test(cmd)) return { effect: "ask", why: a.why }
   }
   return null
 }
