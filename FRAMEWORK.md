@@ -6,6 +6,29 @@ merusak** dual-boot Windows + kernel stock.
 
 Prinsip: **agent boleh optimist, guardrail boleh skeptis.**
 
+## MODE RINGAN (default sejak 21 Okt 2026)
+
+Keputusan user: **build kernel penuh di-drop** (1,5–2 jam + 5,6 GB + 4.020 modul →
+overkill untuk laptop 6C/12T). Yang tetap: framework, plugin, tool, agent, skill,
+mesh, dan guardrail.
+
+Artinya framework dipakai dalam **3 mode**, urut dari yang paling murah:
+
+| Mode | Yang dikerjakan | Biaya | Layer aktif |
+|---|---|---|---|
+| **M1 — Read & Debug** (default) | pahami kernel running: config, modul, crash/oops, log, bottleneck | **0 build**, detik | L0, L1, L7 |
+| **M2 — Tuning runtime** | optimasi **tanpa rebuild**: `sysctl`, scheduler, BBR/FQ, governor CPU, I/O scheduler, page cache, cgroup | **0 build**, menit | L0, L1, L7, L8 (versi runtime) |
+| **M3 — Driver / modul OOT** | tulis modul `.ko` sendiri (1 file C + Makefile) → build **detik**, pasang, uji | ~menit, <50 MB | L0–L4, L7 (tanpa L5/L6) |
+| **M4 — Build kernel penuh** *(opsional, perlu persetujuan)* | kernel custom sungguhan | 1,5–2 jam · 5,6 GB · 4.020 modul | semua L0–L8 |
+
+> **M3 (modul OOT) adalah "kernel development" yang murah** — ini jalur yang
+> realistis kalau mau ngoprek kernel tanpa build 2 jam. Contoh: modul eBPF/char
+> untuk tracing syscall, modul untuk skip flag (rootkit-style, hanya di lab),
+> driver untuk perangkat yang belum didukung.
+> Kalau M4 nanti dijalankan: **wajib `localmodconfig`** (hanya modul hardware
+> aktif) → turun ke ~15–20 mnt & ±1–2 GB, dan kunci daftar modul wajib
+> (wifi/GPU/NVMe/BT/audio/touchpad).
+
 ```
 L0 CONTEXT ──► L1 INTENT ──► L2 PLAN ──► L3 BUILD ──► L4 VERIFY
                                                       │
@@ -15,7 +38,94 @@ L0 CONTEXT ──► L1 INTENT ──► L2 PLAN ──► L3 BUILD ──► L4
                               (izin)                    (1 var/iterasi)
 ```
 
+| Layer | M1 | M2 | M3 | M4 |
+|---|:-:|:-:|:-:|:-:|
+| L0 CONTEXT | ✅ | ✅ | ✅ | ✅ |
+| L1 INTENT | ✅ | ✅ | ✅ | ✅ |
+| L2 PLAN (fragment) | ➖ | ➖ | ➖ | ✅ |
+| L3 BUILD | ➖ | ➖ | ✅ (modul) | ✅ |
+| L4 VERIFY | ➖ | ➖ | ✅ | ✅ |
+| L5 STAGE | ➖ | ➖ | ➖ | ✅ |
+| L6 BOOT | ➖ | ➖ | ➖ | ✅ |
+| L7 OBSERVE | ✅ | ✅ | ✅ | ✅ |
+| L8 TUNE | runtime | runtime | ➖ | ✅ |
+| Guardrail | ✅ | ✅ | ✅ | ✅ |
+
 ---
+
+## Playbook per mode (siap pakai)
+
+### M1 — Read & Debug (default, tanpa build)
+
+| Task | Tool | Output |
+|---|---|---|
+| Pahami state kernel | `kernel_status` | kernel running, toolchain, SB, config kritikal |
+| "Kenapa kernel crash?" | `kernel_crashlog` → `oops-analyst` | klasifikasi + root cause + fix + verifikasi |
+| Modul mana yang dipakai? | `lsmod`, `/sys/module`, `kernel_module_inspect` | peta modul aktif |
+| Opsi apa yang aktif? | `grep CONFIG_ /boot/config-$(uname -r)` | konfigurasi efektif |
+| Bottleneck I/O? | `iostat -x 1 3`, `vmstat 1 3`, `iostat` | antrian + throughput |
+| Syscall lambat? | `strace -c`, `bpftrace` (kalau ada), `/proc/schedstat` | hot path |
+| Interrupt/Timer? | `/proc/interrupts`, `/proc/timer_list` |-IRQ-No | sumber interrupt |
+| Memori? | `/proc/meminfo`, `slabtop -s`, `smaps_rollup` | anon/file/slab |
+| Thermal/throttling? | `sensors`, `/sys/class/thermal`, `turbostat` | throttleReason |
+
+### M2 — Tuning runtime (tanpa rebuild)
+
+Semua di `/etc/sysctl.d/99-kernel-lab.conf` (efektif setelah reboot) atau
+`sysctl -w` (langsung, hilang setelah reboot):
+
+```sh
+# I/O + jaringan (stock Kali sudah punya BBR & FQ sebagai modul → aktifkan)
+sysctl -w net.ipv4.tcp_congestion_control=bbr
+sysctl -w net.core.default_qdisc=fq
+sysctl -w net.core.rmem_max=16777216
+sysctl -w net.core.wmem_max=16777216
+sysctl -w fs.file-max=2097152
+
+# scheduler CPU (hemat daya vs responsif — laptop)
+sysctl -w kernel.sched_latency_ns=1000000      # preemption latency
+cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor   # powersave/performance
+
+# I/O scheduler (NVMe → none, HDD → mq-deadline/bfq)
+cat /sys/block/nvme0n1/queue/scheduler
+# page cache
+sysctl -w vm.vfs_cache_pressure=50
+sysctl -w vm.swappiness=1
+```
+Aturan: **1 variabel per iterasi** → ukur before/after (`iostat`, `curl -w`, `hyperfine`).
+Semua perubahan **reversible** (kembalikan nilai awal) — catat di `MEMORY-KERNEL.md`.
+
+### M3 — Driver / modul out-of-tree (murah, realistis)
+
+```sh
+mkdir -p ~/kernel-lab/modul && cd ~/kernel-lab/modul
+# Makefile
+cat > Makefile <<'EOF'
+obj-m := namamod.o
+KDIR ?= /lib/modules/$(shell uname -r)/build
+all: ; $(MAKE) -C $(KDIR) M=$(PWD) modules
+clean: ; $(MAKE) -C $(KDIR) M=$(PWD) clean
+EOF
+# namamod.c — minimal: license, author, description, version, init/exit
+make
+modinfo namamod.ko            # vermicus harus == uname -r
+insmod namamod.ko && dmesg | tail -20
+rmmod namamod
+```
+- `KDIR` harus menunjuk tree versi **sama persis** → di mesin ini:
+  `/lib/modules/$(uname -r)/build` (symlink headers) — **tanpa** perlu source tree penuh.
+- Kalau headers tidak ada: `apt install linux-headers-$(uname -r)` (ringan, ~100 MB).
+- Verifikasi wajib: `vermagic` cocok, tidak ada symbol undefined, `dmesg` bersih.
+
+### M4 — Build kernel penuh (opsional, perlu persetujuan + waktu)
+
+Syarat: (1) `localmodconfig` (bukan config penuh), (2) daftar modul wajib dikunci,
+(3) `LOCALVERSION` berbeda, (4) pre-flight + staging install. Detail di
+`install-kernel.sh` (default dry-run).
+
+---
+
+
 
 ## L0 — CONTEXT (otomatis, tanpa biaya token besar)
 

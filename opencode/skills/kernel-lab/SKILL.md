@@ -1,6 +1,6 @@
 ---
 name: Kernel Lab
-description: Alur kerja kernel development di mesin Kali — source tree Kali, config baseline, build out-of-tree, fragment config, modul, install aman, dan jebakan dual-boot. Gunakan saat mengerjakan build/config/modul kernel.
+description: Alur kerja kernel di mesin Kali — tuning runtime tanpa rebuild, analisis crash/oops, driver-modul out-of-tree, dan (opsional) build kernel custom. Gunakan saat mengerjakan tuning kernel, debugging boot, atau membuat modul .ko.
 metadata:
   opencode/autoinvoke: true
 ---
@@ -8,132 +8,112 @@ metadata:
 # Kernel Lab — SOP mesin Kali (OpenCode #2)
 
 Skill ini berisi **prosedur kerja** track kernel. Load saat mulai mengerjakan
-build/config/modul kernel di mesin ini.
+tuning kernel, debugging crash, atau membuat modul/driver di mesin ini.
+
+> **Mode default sejak 21 Okt 2026: M1–M3 (TANPA build kernel penuh).**
+> Build kernel custom penuh **dibatalkan** (1,5–2 jam + 5,6 GB + 4.020 modul →
+> overkill) dan source tree **sudah dihapus** (hemat 1,9 GB).
+> Pilih mode sesuai task:
+> - **M1 Read & Debug** — pahami kernel running, analisis crash/oops, peta modul.
+> - **M2 Tuning runtime** — optimasi **tanpa rebuild** (sysctl/scheduler/governor/BBR).
+> - **M3 Driver/modul OOT** — bikin modul `.ko` sendiri (build **detik**).
+> - **M4 Build kernel penuh** — **hanya atas permintaan eksplisit** + izin
+>   (biaya ±1,5–2 jam & ±5,6 GB; wajib `localmodconfig`).
+> Detail: `references/framework.md` (layer L0–L8 + playbook per mode).
 
 ## Peta path (fakta)
 
 | Kebutuhan | Path |
 |---|---|
-| Source tree (patch Kali) | `/root/kernel-lab/src/linux-7.1.5` |
-| Build dir (O=) | `/root/kernel-lab/build/linux-7.1.5` |
-| Base config (semi-custom) | `/boot/config-$(uname -r)` |
-| Fragment config | `/root/kernel-lab/config/fragments/*.conf` |
-| Log build | `/root/kernel-lab/logs/kbuild-*.log` |
+| Source tree | **TIDAK ADA** (dihapus 21 Okt 2026) — tool butuh tree akan bilang tidak ada |
+| Header modul OOT | `/lib/modules/$(uname -r)/build` (ringan, untuk M3) |
+| Base config kernel | `/boot/config-$(uname -r)` |
+| Fragment config | `/root/kernel-lab/config/fragments/*.conf` (`perf.conf`, `debug.conf`, `localversion.conf` — tervalidasi) |
 | Tool kit | `/root/kernel-lab/kernel-specialist/tools/kernel/*/` |
 | Repo kit + config | `/root/kernel-lab/kernel-specialist/` |
+| Sysctl tuning | `/etc/sysctl.d/99-kernel-lab.conf` (buat saat M2) |
 
-## Sumber kernel (kalau tree belum ada)
+## M2 — Tuning runtime (paling sering dipakai, 0 build)
 
 ```sh
-# 1) aktifkan deb-src Kali
-cat > /etc/apt/sources.list.d/kali-src.sources <<'EOF'
-Types: deb-src
-URIs: http://http.kali.org/kali/
-Suites: kali-rolling
-Components: main contrib non-free non-free-firmware
-Signed-By: /usr/share/keyrings/kali-archive-keyring.gpg
+# Basis: kernel stock Kali sudah punya BBR, FQ, ZSWAP, XFS_RT, KFENCE → tinggal aktifkan
+sysctl -w net.ipv4.tcp_congestion_control=bbr
+sysctl -w net.core.default_qdisc=fq
+sysctl -w net.core.rmem_max=16777216
+sysctl -w net.core.wmem_max=16777216
+sysctl -w fs.file-max=2097152
+sysctl -w vm.vfs_cache_pressure=50
+sysctl -w vm.swappiness=1
+# CPU governor (laptop): powersave (hemat) / performance (responsif)
+cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+# I/O scheduler per device
+cat /sys/block/nvme0n1/queue/scheduler
+```
+
+**Aturan**: ukur baseline dulu (iostat/vmstat/timing), ubah **1** variabel,
+ukur ulang, catat nilai awal untuk rollback, tulis hasilnya ke `MEMORY-KERNEL.md`.
+Simpan permanen di `/etc/sysctl.d/99-kernel-lab.conf` (efektif setelah reboot).
+
+## M3 — Modul out-of-tree (build detik)
+
+```sh
+mkdir -p ~/kernel-lab/modul && cd ~/kernel-lab/modul
+cat > Makefile <<'EOF'
+obj-m := namamod.o
+KDIR ?= /lib/modules/$(shell uname -r)/build
+all: ; $(MAKE) -C $(KDIR) M=$(PWD) modules
+clean: ; $(MAKE) -C $(KDIR) M=$(PWD) clean
 EOF
-apt-get update
-# 2) ambil source kernel yang PERSIS versi yang jalan
-cd /root/kernel-lab/src && apt-get source linux
+# namamod.c: MODULE_LICENSE/AUTHOR/DESCRIPTION/VERSION + module_init/exit
+make && modinfo namamod.ko   # vermagic HARUS == uname -r
+insmod namamod.ko && dmesg | tail -20 && rmmod namamod
 ```
 
-Hasil: `linux-<versi>` (mis. `linux-7.1.5`) berisi tree + patch Debian/Kali.
-`apt-get source` butuh paket build: `dpkg-dev`, `debhelper`, `fakeroot` (untuk `make bindeb-pkg`).
+- Kalau `/lib/modules/$(uname -r)/build` tidak ada → `apt install linux-headers-$(uname -r)`.
+- Cek symbol undefined: `nm -u namamod.ko` vs `Module.symvers` kernel running.
+- Tool: `kernel_module_inspect` / `tools/kernel/module_inspect/module_inspect.py --module x.ko`.
 
-## Prasyarat build (verifikasi, jangan diasumsikan)
-
-| Kebutuhan | Pemeriksaan | Kenapa |
-|---|---|---|
-| gcc/clang/make/bc/bison/flex | `command -v gcc bison flex bc` | build basic |
-| libelf + openssl dev | `dpkg -l libelf-dev libssl-dev` | signing/BTF |
-| pahole (dwarves) | `command -v pahole` | `CONFIG_DEBUG_INFO_BTF=y` |
-| rustc (+clang) | `rustc --version` vs `CONFIG_RUSTC_VERSION_TEXT` | `CONFIG_RUST=y` (Kali: rustc 1.95.0) |
-| ccache | `command -v ccache` | iterasi cepat |
-| lld (LLVM) | `ld.lld --version` | opsional `LLVM=1` |
-
-Kalau `CONFIG_RUST=y` tapi versi rustc tidak sama dengan `CONFIG_RUSTC_VERSION_TEXT`
-→ build akan gagal dengan pesan versi; jangan dipaksa, samakan dulu.
-
-## SOP: build semi-custom (aman)
+## M1 — Read & Debug
 
 ```sh
-# base = config kernel yang sedang jalan (semua driver laptop ikut)
-cp /boot/config-$(uname -r) /root/kernel-lab/build/linux-7.1.5/.config
-
-# pakai tool kit (merge fragment + olddefconfig + build + verifikasi artefak)
-python3 /root/kernel-lab/kernel-specialist/tools/kernel/kbuild/kbuild.py \
-  --tree /root/kernel-lab/src/linux-7.1.5 \
-  --out  /root/kernel-lab/build/linux-7.1.5 \
-  --base-config /boot/config-$(uname -r) \
-  --fragment /root/kernel-lab/config/fragments/<nama>.conf \
-  --target bzImage --jobs 12 --ccache
+uname -r
+grep -E '^CONFIG_(PREEMPT|HZ_|MODULES|RUST|DEBUG_INFO_BTF|MODULE_SIG)' /boot/config-$(uname -r)
+lsmod; ls /sys/module | head -40
+cat /proc/cmdline; head -20 /proc/interrupts
+iostat -x 1 3; vmstat 1 3
 ```
 
-Manual equivalent:
-```sh
-cd /root/kernel-lab/src/linux-7.1.5
-make O=/root/kernel-lab/build/linux-7.1.5 olddefconfig
-make O=/root/kernel-lab/build/linux-7.1.5 -j12 CCACHE_ENABLE=1 bzImage modules
-```
+Crash → tool `kernel_crashlog` → subagent `oops-analyst` (klasifikasi → root cause → fix → verifikasi).
 
-## SOP: fragment config
+## M4 — Build kernel penuh (opsional; butuh izin + waktu)
 
-- Satu baris satu opsi: `CONFIG_X=y` / `=m` / `=n` (atau `# CONFIG_X is not set`).
-- Tanpa komentar di dalam file fragment (komentar disimpan di MEMORY/HANDOFF).
-- Validasi sebelum build:
-```sh
-python3 /root/kernel-lab/kernel-specialist/tools/kernel/config_check/config_check.py \
-  --tree /root/kernel-lab/src/linux-7.1.5 --fragment <frag> --strict
-```
+Lihat `references/framework.md` §M4 dan `install-kernel.sh` (default dry-run).
+WAJIB: `localmodconfig` (bukan config penuh) + `LOCALVERSION` berbeda
+(`localversion.conf`) + pre-flight + staging install.
+Kalau butuh source tree lagi: `deb-src` Kali + `apt-get source linux` (lihat §M4).
 
-## SOP: install (BERBAHAYA — dual-boot)
+## Jebakan khas mesin ini
 
-Checklist sebelum install:
-1. Kernel stock Kali masih ada & bootable (`ls /boot/vmlinuz-*`) — **jangan dihapus**.
-2. Ruang `/boot` cukup untuk 2 kernel + initramfs (`df -h /boot`).
-3. Secure Boot state dicek: `mokutil --sb-state` (butuh `mok-util`).
-   - SB **aktif** → kernel custom tidak akan boot (tanda MOK belum di-enroll).
-4. Partisi `/boot` EFI + Windows Boot Manager tetap utuh (dual-boot).
-
-Langkah (hanya atas izin user):
-```sh
-make O=/root/kernel-lab/build/linux-7.1.5 modules_install
-make O=/root/kernel-lab/build/linux-7.1.5 install
-update-initramfs -c -k <versi-kernel>     # atau: mkinitramfs -o /boot/initrd.img-<versi> <versi>
-update-grub                                  # cek /etc/default/grub (GRUB_TIMEOUT, os-prober)
-```
-
-Rollback: boot ke kernel stock (GRUB → Advanced options) lalu `apt remove linux-image-<versi-custom>`.
-
-## Jebakan khas mesin ini (dual-boot Windows + Kali)
-
-1. **Secure Boot**: custom kernel tidak boot tanpa MOK. Solusi: `mokmanager` (enroll MOK) atau
-   nonaktifkan SB. Cek dulu sebelum build, jangan setelah boot gagal.
-2. **`make install` menimpa `/boot`**: kernel stock bisa hilang → dual boot bisa rusak.
-   Selalu `--install-to /boot/staging` dulu untuk uji.
-3. **`update-initramfs`**: initramfs lama sering jadi penyebab boot gagal setelah kernel update.
-4. **NVIDIA/AMD GPU proprietary**: `CONFIG_MAKEFILE_OUTPUT`/DKMS harus rebuilt — `dkms status`.
-5. **ZFS/NFS**: modul besar, build lebih lama; `CONFIG_ZFS` perlu `CONFIG_CRYPTO` user API.
-6. **Rust in kernel**: `CONFIG_RUST=y` butuh rustc versi persis; kalau Kali update kernel,
-   `CONFIG_RUSTC_VERSION_TEXT` ikut berubah → cek ulang tiap build.
-7. **`/boot` kecil di laptop**: 2 kernel + 2 initramfs bisa penuh → cek `df -h /boot` dulu.
-8. **Windows boot manager**: `os-prober` Sometimes disabled → entri Windows hilang dari GRUB
-   setelah `update-grub`. Cek `/etc/grub.d/`.
-
-## Modul (.ko)
-
-```sh
-# build OOT
-make -C /lib/modules/$(uname -r)/build M=$PWD modules
-# verifikasi SEBELUM pasang
-python3 /root/kernel-lab/kernel-specialist/tools/kernel/module_inspect/module_inspect.py --module x.ko
-# pasang (vermagic harus == uname -r)
-insmod x.ko && dmesg | tail -20
-```
+1. **Secure Boot NONAKTIF** (`SecureBoot=0`, `SetupMode=1`) → kernel custom boleh boot
+   tanpa MOK. (`mokutil` tidak ada di repo Kali → baca `/sys/firmware/efi/efivars/SecureBoot-*`,
+   byte ke-5; file efivarfs **tidak bisa di-seek** → baca utuh.)
+2. **`/boot` bukan partisi terpisah** → ikut `/` (102G, ~62G free). Partisi EFI 976M
+   di `/boot/efi` (tempat boot loader). Aman untuk 2+ kernel.
+3. **`GRUB_CMDLINE_LINUX_DEFAULT="quiet"`** → log boot tidak kelihatan; **hapus `quiet`**
+   sementara saat debug, lalu kembalikan.
+4. **Build kernel penuh = mahal**: config stock = 4.020 modul → ~12.000 objek →
+   1,5–2 jam & 5,6 GB. Ganti 1 opsi config = rebuild ~90% objek (ccache hit anjlok ~5%).
+   → pakai `localmodconfig` kalau memang perlu.
+5. **`HOSTCC="ccache gcc"`** bikin build gagal (`-Clinker=$(HOSTCC)` → rustc salah parse).
+   Ccache hanya lewat `CC=ccache gcc`.
+6. **`CONFIG_RUST=y`** butuh rustc versi persis (1.95.0) + `bindgen` + paket `rust-src`.
+7. **Kernel 7.1.5 Kconfig berubah**: simbol `menuconfig` (HUGETLBFS, TCP_CONG_ADVANCED,
+   KFENCE, TRANSPARENT_HUGEPAGE, GCC_PLUGINS), HZ maksimum `HZ_1000`, `SCHEDSTATS`
+   (bukan SCHED_DEBUG), `DEBUG_VM_MAPLE_TREE`/`DEBUG_VM_RB` (bukan PMAP/PML),
+   Btrfs tanpa `BTRFS_ZSTD`.
 
 ## Aftercare (wajib)
 
-- Update `MEMORY.md` + `TRACKER.md` track kernel (aturan disiplin platform).
+- Update `MEMORY-KERNEL.md` + `TRACKER-KERNEL.md` (aturan disiplin platform).
 - Bersihkan artefak eksperimen yang tidak dipakai (out-of-tree dir lama, log > 7 hari).
-- Kalau install sukses: catat versi, cara boot fallback, dan status `update-grub`.
+- Kalau tuning M2: catat nilai awal (rollback) + hasil before/after.

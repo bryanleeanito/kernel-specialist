@@ -102,8 +102,10 @@ echo "[OK] area kerja → $LAB"
 
 cat <<'EOF'
 
-NEXT (manual, butuh izin):
-  1. opencode reload            # muat agent/command/skill baru
+NEXT (manual):
+  1. opencode reload            # muat agent/command/skill/plugin baru
   2. /kstatus                   # cek state lab kernel
-  3. sudo update-initramfs -c -k <versi>   # hanya kalau sudah install kernel
+  3. /kperf                     # tuning runtime (tanpa rebuild)
+  4. /koops <file-log>          # analisis crash kernel
+  (install kernel hanya via install-kernel.sh, default dry-run)
 EOF
