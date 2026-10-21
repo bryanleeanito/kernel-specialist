@@ -30,7 +30,7 @@ Kolom hasil wajib berisi **bukti nyata** (output make, path artefak, angka).
 | 15 | Guardrail anti-false-positive | SELESAI | pola di-anchor ke posisi perintah + isi heredoc dibuang → `echo 'rm -rf /boot'` & dokumentasi heredoc LOLOS, eksekusi berbahaya tetap DENY. kernel-lab 39/39, kali-ops 52/52 | 2026-10-21 |
 | 16 | Doktrin Kolaborasi Agent↔Kali | SELESAI | section baru di `AGENTS.md` (paket + terpasang): LIHAT→USULKAN→IZIN→KERJAKAN→VERIFIKASI + namespace tool `kali`/`kernel` | 2026-10-21 |
 | 17 | **Bootstrap restore (reinstall OS)** | **SELESAI** | paket `bootstrap/` (11 fase idempotent + `verify.sh` + `expected.json`) → drive `07-SISTEM/kali-lab-bootstrap/` + GitHub `kernel-specialist/bootstrap/`. Uji: `bootstrap.sh --skip=1,2,7,8,9` jalan bersih; `verify.sh` → **PARITAS OK** (semua field identik). Bug yg ketemu saat uji: `say()` unbound + `:-{}` pattern expansion → sudah diperbaiki | 2026-10-21 |
-| 13 | Push repo `kernel-specialist` ke GitHub | BLOKAD | butuh token GitHub user (belum ada kredensial di mesin ini) | 2026-10-21 |
+| 13 | Push repo ke GitHub | **SELESAI** | 3 repo ter-push via **SSH** (bukan token — fine-grained PAT tak bisa write): `kernel-specialist` (master) · `kali-ops` (master) · `opencode-mesh-v2` (main, 54 commit, rebase bersih). MCP github CONNECTED (token di env service) | 2026-10-21 |
 
 ## Milestone kernel
 
