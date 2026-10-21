@@ -30,6 +30,31 @@ Mesin Kali sekarang punya **track kernel & co-pilot sistem** untuk OpenCode v2:
 - `git@github.com:bryanleeanito/kali-ops.git` (private) — plugin co-pilot sistem
 - `git@github.com:bryanleeanito/opencode-mesh-v2.git` (public) — mesh (54 commit baru ter-push)
 
+## 1b. Topologi 2 instance OpenCode di mesin KALI (penting!)
+
+| Instance | User | Config | Fokus | Tool native | Plugin |
+|---|---|---|---|---|---|
+| **#1** | `kzldxxero` | `~/.config/opencode/` | offensive · CTF · OSINT · pentest | 25 MCP (nmap/shodan/nuclei/hexstrike/pentest-mcp/kali-mcp/…) + agent `recon-analyst` `vuln-analyst` + command `/recon /scan /osint /ctf /pentest` + 7 skill | `shell-env` `dev-journal` `token-tracker` `agent-memory` `opencode-mem` **+ `kali-ops` + `kernel-lab` (baru 21 Okt)** |
+| **#2** (sesi ini) | `root` | `/root/.config/opencode/` | **kernel & sistem** | namespace `kernel` (6) + `kali` (8) | `kernel-lab` `kali-ops` `v1-compat` `dev-journal` `shell-env-dev` |
+
+**Yang kukasih ke instance #1 (21 Okt 2026):**
+- plugin `kali-ops` (8 tool co-pilot sistem: `kali_sys_status` `kali_tool_check` `kali_net_status`
+  `kali_svc_status` `kali_fw_status` `kali_disk_usage` `kali_pkg_info` `kali_pkg_change`)
+  → **WAJIB dipakai sebelum eksekusi**: cek tool terpasang? status jaringan/firewall? paket mana? ubah paket (dry-run dulu).
+- plugin `kernel-lab` (6 tool kernel) → berguna buat offensive: cek `.ko` mencurigakan
+  (vermagic/signature/symbol), analisis crash dari exploit (`kernel_crashlog` → agent `oops-analyst`).
+- **guardrail** keduanya ikut terpasang di instance #1 → perintah merusak **deny**, berisiko **ask**.
+- section "Instance kembar" di `AGENTS.md` instance #1 (cara koordinasi via mesh + lokasi dokumen).
+
+> Instance #1 **tidak** kuganggu setting/config/MCP-nya — hanya nambah 2 plugin + 1 section pointer.
+> Instance #1 butuh **restart/reload** biar plugin baru termuat: `opencode reload` (atau tutup-buka TUI).
+
+**Koordinasi lintas instance (semua di mesin ini):**
+- **Mesh** (bus): `kali-kernel` (role kernel) ↔ `windows-dev` (role development).
+  `python3 scripts/broadcast.py --message "..."` · `handoff.py --to kali-kernel --task "..."`
+- **Drive D: bersama**: `07-SISTEM/HANDOVER-KERNEL-LAB.md` + `07-SISTEM/kernel-lab/` (memori & tracker track kernel).
+- **GitHub**: repo kit untuk sisi Windows.
+
 ## 2. Yang bisa langsung dipakai di Windows
 
 ```sh
