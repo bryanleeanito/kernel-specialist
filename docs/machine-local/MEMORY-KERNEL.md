@@ -250,6 +250,24 @@ static ssize_t lab_write(struct file *file, const char __user *buf, size_t count
   custom — **tidak menjangkau modul OOT**), `CONFIG_HARDENED_USERCOPY` (untuk
   `copy_struct_from_user`). Untuk OOT modul: satu-satunya bets = `copy_from_user()` + cek length.
 
+## 7d. Pagar audit (21 Okt 2026)
+
+`/usr/local/bin/pagar-audit.sh` → laporan audit health (SISTEM · SECURITY · INTEGRITAS ·
+UPDATE · OPENCODE/TRACK · MESH) → log di `/var/log/pagar-audit/audit-<ts>.log` + `last-audit.txt`.
+Otomatis: systemd `pagar-audit.service` + `.timer` (boot + tiap 6 jam).
+Notifikasi opsional (tanpa secret di payload): `PAGER_TELEGRAM_TOKEN`+`PAGER_TELEGRAM_CHAT` (Telegram)
+atau `PAGER_WEBHOOK` (JSON `{"text":...}`). Mode `--check` → exit non-zero bila ada temuan kritis.
+
+**Temuan aktif (21 Okt):**
+- `0.0.0.0:8888` → `hexstrike_server.py` (milik user kzldxxero, cron @reboot) **expose ke LAN** → kalau tak perlu dari jaringan lain, bind ke 127.0.0.1.
+- 137 paket upgradable menunggu (bukan kernel) → `apt upgrade` saat senggang.
+- 28 SUID binary, 2 aturan sudoers, 203 modul loaded, 0 modul nyangkut, 0 unit gagal, Secure Boot nonaktif.
+- 2 repo kit (`kernel-specialist`, `kali-ops`) sudah **PUBLIC** → bisa dibaca tanpa auth & oleh MCP.
+
+**Helper visibility:** `/usr/local/bin/make-repos-public.sh` (PATCH `private=false` via API;
+butuh token berizin *Administration: Read and write* — token sekarang read-only → script
+menampilkan pesan error yang jelas).
+
 ## 8. Jejak tuning runtime (M2) — isi setiap pendekatan
 
 Format: `tanggal | parameter | nilai lama → baru | cara ukur | before → after | rollback`
