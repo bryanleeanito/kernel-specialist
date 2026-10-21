@@ -285,3 +285,33 @@ Rollback penuh: hapus 2 file itu + reboot (atau `sysctl -w` per baris di atas).
 - Disk/lokal & I/O scheduler **tidak diubah** (sudah optimal, dan governor
   `schedutil` dipakai demi baterai).
 
+## 9. Bootstrap / restore untuk reinstall OS (21 Okt 2026)
+
+Paket: `/root/kernel-lab/bootstrap/` · deploy: `07-SISTEM/kali-lab-bootstrap/` (drive) + `kernel-specialist/bootstrap/` (GitHub).
+
+**Fungsi**: kalau OS di-install ulang, 1 perintah mengembalikan semuanya **sama persis**.
+
+```sh
+sudo bash /root/kernel-lab/bootstrap/bootstrap.sh     # 11 fase idempotent
+bash /root/kernel-lab/bootstrap/verify.sh              # cek paritas vs expected.json
+```
+
+| Fase | Isi |
+|---|---|
+| 0 preflight · 1 base-pkg · 2 offensive-tools | toolchain kernel + tool offensive + node/uv |
+| 3 skills · 4 plugins · 5 track-config | 36+4 skill · 5 plugin · 4 agent · 6 command · instruksi |
+| 6 memory | restore `MEMORY.md`/`TRACKER.md`/`AGENTS.md` + varian `-KERNEL` + `opencode.json` (V2) |
+| 7 tuning | `/etc/sysctl.d/99-kernel-lab.conf` + `/etc/modules-load.d/kernel-lab.conf` (M2) |
+| 8 git | identitas `kzldx`, credential helper (env var), SSH key (**public key dicetak**, private key TIDAK disimpan di drive), remote SSH, token MCP |
+| 9 mesh | daftar `kali-kernel` + presence (IP DHCP aman) |
+| 10 verify | paritas vs `expected.json` |
+
+**Keputusan desain:**
+- **Drive D: = sumber kebenaran offline** (GitHub butuh key/token; drive selalu ada).
+- **Idempoten** — aman dijalankan berulang; fase beres dilewati.
+- **Private key tidak disimpan di drive** (NTFS permission longgar) → bootstrap buat key baru + cetak public key (1 tempelan).
+- **Credential = env var saja** (aturan platform): helper git baca `$GITHUB_TOKEN`; tidak ada `~/.git-credentials`.
+- **Paritas diukur, bukan diklaim**: `expected.json` (reference) + `verify.sh` → "PARITAS OK".
+- Memori per-OS tidak ditimpa sembarangan: fase 6 backup dulu (`*.bak-<timestamp>`), dan `install.sh` hanya backup bila isi berbeda.
+
+**Status paritas saat ini: OK** (plugins/agents/commands/skills/packages/tuning/files/mesh identik; tes 73/73 + 56/56).
