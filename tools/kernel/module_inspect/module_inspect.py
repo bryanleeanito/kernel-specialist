@@ -40,9 +40,13 @@ def modinfo(path, fields=FIELDS):
 
 
 def running_vermagic():
-    rc, o = run(["modinfo", "-F", "vermagic", "/lib/modules/%s" %
-                 os.uname().release])
-    return o.strip()
+    """Release kernel yang sedang jalan.
+
+    Catatan: `modinfo -F vermagic /lib/modules/<rel>` SALAH (modinfo butuh file .ko,
+    bukan direktori) → menghasilkan "ERROR: Module ... not found".
+    Yang otoritatif untuk perbandingan: `uname -r` (field pertama vermagic modul).
+    """
+    return os.uname().release
 
 
 def sha256(path):
@@ -98,10 +102,12 @@ def inspect(path, symvers=None):
     }
     vm = info.get("vermagic", "")
     rvm = rep["running_vermagic"]
-    if vm and rvm and vm != rvm:
-        rep["errors"].append(
-            f"vermagic tidak cocok — modul: '{vm}' | kernel running: '{rvm}' "
-            f"→ modul TIDAK bisa dimuat ke kernel yang sedang jalan")
+    if vm and rvm:
+        # bandingkan field pertama (release) — sisanya (SMP/preempt/mod_unload) ikut
+        if vm.split()[0] != rvm.split()[0]:
+            rep["errors"].append(
+                f"vermagic tidak cocok — modul: '{vm}' | kernel running: '{rvm}' "
+                f"→ modul TIDAK bisa dimuat ke kernel yang sedang jalan")
     if not info.get("signer") and info.get("sig_id") in (None, ""):
         rep["warnings"].append("modul tidak signed (tanpa signature) — "
                                "hanya bisa dimuat jika CONFIG_MODULE_SIG_FORCE tidak aktif")
@@ -110,6 +116,10 @@ def inspect(path, symvers=None):
     syms, missing = unresolved_symbols(path, symvers)
     if syms is not None:
         rep["undefined_symbols"] = len(syms)
+        # symbol undefined WAJIB pada modul (diresolve dari kernel) — bukan error.
+        # Error hanya kalau symbol itu tidak ada di Module.symvers kernel.
+        rep["info"] = (f"{len(syms)} symbol undefined (normal untuk modul; "
+                       f"diresolve dari kernel running)")
     if missing:
         rep["errors"].append(f"{len(missing)} symbol undefined tidak ada di Module.symvers: "
                              + ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else ""))
@@ -144,8 +154,8 @@ def render(rep):
     L.append("-" * 68)
     L.append(f"kernel running : {rep['running_kernel']}")
     L.append(f"vermagic running: {rep['running_vermagic']}")
-    if "undefined_symbols" in rep:
-        L.append(f"undefined syms  : {rep['undefined_symbols']}")
+    if rep.get("info"):
+        L.append(f"symbols        : {rep['info']}")
     if rep.get("modprobe_depends"):
         L.append(f"modprobe deps   : {rep['modprobe_depends']}")
     for w in rep.get("warnings", []):
