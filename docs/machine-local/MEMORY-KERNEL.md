@@ -40,6 +40,7 @@ file ini + log → ubah pola → ulangi sampai ada hasil.
 | CPU / RAM | 12 core / 14 GiB (swap 5.7G) |
 | root fs | 102G, sisa ~67G |
 | `/boot` | **bukan partisi terpisah** — ikut `/` (nvme0n1p6, 102G, ~62G free). EFI partisi sendiri `/dev/nvme0n1p5` (976M) di `/boot/efi` (975M free) |
+| drive eksternal | `nvme0n1p4` NTFS label **"Data Lee Samsung"** (D:) — **TIDAK auto-mount setelah reboot** → bootstrap fase 0 mount otomatis (`ntfs3` → fallback `ntfs-3g`) |
 | IP LAN | **DHCP — berubah antara sekolah & rumah.** Terakhir: `15.15.0.201/22` (wlan0, gateway 15.15.0.1, DNS 15.15.0.1 + 203.142.82.222). Sumber IP live untuk mesh = `state/presence/kali-kernel.json` |
 | **Secure Boot** | **NONAKTIF** (efivars `SecureBoot=0`, `SetupMode=1`) → kernel custom **boleh boot tanpa MOK**. `mokutil` tidak ada di repo Kali → deteksi via `/sys/firmware/efi/efivars/` (efivarfs tidak seekable → baca full, byte ke-5) |
 | OpenCode | v2.1.1, background service di 127.0.0.1:49375 (Basic auth) |
