@@ -254,6 +254,13 @@ ph9() {
   python3 "$MESH/scripts/register.py" --name "kali-kernel" --role kernel --ip "$(ip -4 -o addr show wlan0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)" --capabilities kernel,kbuild,driver,perf,debug 2>&1 | sed 's/^/  /'
   python3 "$MESH/scripts/mesh_status.py" --name kali-kernel --local 2>&1 | sed 's/^/  /' | head -8
   ok "terdaftar + presence ditulis (IP DHCP aman: presence di-refresh tiap sync)"
+  # presence cron (agar tetap online setelah reboot) — idempotent
+  if crontab -l 2>/dev/null | grep -q "mesh-presence"; then
+    ok "cron presence sudah ada"
+  else
+    ( cd "$MESH" && python3 scripts/mesh_status.py --install 2>&1 | tail -4 | sed 's/^/  /' )
+    ok "cron presence di-install (*/15 + @reboot)"
+  fi
 }
 
 # --------------------------------------------------------------- 10 verify
