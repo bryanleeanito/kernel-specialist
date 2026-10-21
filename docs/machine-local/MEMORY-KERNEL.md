@@ -320,5 +320,7 @@ bash /root/kernel-lab/bootstrap/verify.sh              # cek paritas vs expected
 2. **Paste token bisa nyasar karakter** (terbukti: `sgithub_pat_…` → "Invalid username or token") →
    selalu **trim + validasi pola** (`^github_pat_[A-Za-z0-9_]+$`) sebelum dipakai.
 3. Skrip bisa **menimpa env service dengan token kosong** → guard: skip kalau kosong.
+4. Repo mesh **selalu dirty** (auto-sync mesin Windows nulis `state/*.json` tiap 15 mnt) →
+   `git rebase` gagal ("Please commit or stash") → pakai **`git pull --rebase --autostash`**.
 
 **Status paritas saat ini: OK** (plugins/agents/commands/skills/packages/tuning/files/mesh identik; tes 73/73 + 56/56).
